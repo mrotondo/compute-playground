@@ -1,0 +1,11 @@
+{
+  "name": "com.mrotondo.computeplayground",
+  "displayName": "Compute Playground",
+  "version": "0.1.0",
+  "unity": "6000.6",
+  "description": "A minimal scriptable render pipeline that blits one RenderTexture to the screen, plus a base class and editor tooling for compute-shader experiments. No package dependencies.",
+  "author": {
+    "name": "Mike Rotondo"
+  },
+  "dependencies": {}
+}

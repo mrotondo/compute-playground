@@ -1,0 +1,72 @@
+#pragma kernel Init
+#pragma kernel Step
+
+// State lives in alpha; rgb carries the colour that ends up on screen, because the
+// display texture and the simulation texture are the same texture.
+RWTexture2D<float4> _StateWrite;
+Texture2D<float4> _StateRead;
+
+uint _Resolution;
+uint _StateCount;
+uint _Threshold;
+float _Seed;
+
+float Hash(uint2 p)
+{
+    float h = dot(float2(p) + _Seed, float2(127.1, 311.7));
+    return frac(sin(h) * 43758.5453123);
+}
+
+float3 StateColour(uint state)
+{
+    float hue = float(state) / float(_StateCount);
+    float3 wave = abs(frac(hue + float3(0.0, 0.6666, 0.3333)) * 6.0 - 3.0) - 1.0;
+    return saturate(wave);
+}
+
+uint ReadState(uint2 coord)
+{
+    coord = coord % _Resolution;                       // wrap at the edges
+    return uint(round(_StateRead[coord].a * float(_StateCount)));
+}
+
+void Write(uint2 coord, uint state)
+{
+    _StateWrite[coord] = float4(StateColour(state), float(state) / float(_StateCount));
+}
+
+[numthreads(8, 8, 1)]
+void Init(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= _Resolution || id.y >= _Resolution)
+        return;
+
+    Write(id.xy, uint(Hash(id.xy) * float(_StateCount)) % _StateCount);
+}
+
+[numthreads(8, 8, 1)]
+void Step(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= _Resolution || id.y >= _Resolution)
+        return;
+
+    uint state = ReadState(id.xy);
+    uint successor = (state + 1) % _StateCount;
+
+    uint count = 0;
+    for (int dy = -1; dy <= 1; dy++)
+    {
+        for (int dx = -1; dx <= 1; dx++)
+        {
+            if (dx == 0 && dy == 0)
+                continue;
+
+            // + _Resolution keeps the arithmetic positive before the wrap in ReadState.
+            uint2 neighbour = uint2(id.x + dx + _Resolution, id.y + dy + _Resolution);
+            if (ReadState(neighbour) == successor)
+                count++;
+        }
+    }
+
+    Write(id.xy, count >= _Threshold ? successor : state);
+}

@@ -1,0 +1,56 @@
+using Mrotondo.ComputePlayground;
+using UnityEngine;
+
+/// <summary>
+/// A cyclic cellular automaton, here only as a starting point. Replace Initialize and Step.
+/// </summary>
+public class #NAME# : ComputeExperiment
+{
+    static readonly int StateReadId = Shader.PropertyToID("_StateRead");
+    static readonly int StateWriteId = Shader.PropertyToID("_StateWrite");
+    static readonly int ResolutionId = Shader.PropertyToID("_Resolution");
+    static readonly int StateCountId = Shader.PropertyToID("_StateCount");
+    static readonly int ThresholdId = Shader.PropertyToID("_Threshold");
+    static readonly int SeedId = Shader.PropertyToID("_Seed");
+
+    [Header("#NAME#")]
+    [SerializeField, Range(3, 32)] int stateCount = 12;
+    [SerializeField, Range(1, 8)] int threshold = 2;
+
+    PingPong<RenderTexture> _state;
+    int _initKernel;
+    int _stepKernel;
+
+    protected override void Initialize()
+    {
+        _initKernel = FindKernel("Init");
+        _stepKernel = FindKernel("Step");
+
+        _state = CreatePingPongTextures();
+        Display = _state.Read;
+
+        PushParameters();
+        compute.SetFloat(SeedId, Random.value * 1000f);
+        compute.SetTexture(_initKernel, StateWriteId, _state.Read);
+        Dispatch(_initKernel);
+    }
+
+    protected override void Step(int stepIndex)
+    {
+        PushParameters();
+
+        compute.SetTexture(_stepKernel, StateReadId, _state.Read);
+        compute.SetTexture(_stepKernel, StateWriteId, _state.Write);
+        Dispatch(_stepKernel);
+
+        _state.Swap();
+        Display = _state.Read;
+    }
+
+    void PushParameters()
+    {
+        compute.SetInt(ResolutionId, resolution);
+        compute.SetInt(StateCountId, stateCount);
+        compute.SetInt(ThresholdId, threshold);
+    }
+}
