@@ -5,7 +5,7 @@ scaffolding a compute-shader experiment needs. The package lives at
 `Packages/com.mrotondo.computeplayground/`; this project is where it is developed.
 
 Embedded rather than consumed from git, because a package installed by git URL lands read-only
-in `Library/PackageCache` and cannot be edited in place. Experiments consume it from a tag.
+in `Library/PackageCache` and cannot be edited in place. Experiments track `main`.
 
 ## Starting a new experiment project
 
@@ -17,7 +17,7 @@ with defaults on first open, and `Apply Settings` takes it from there.
 ```json
 {
   "dependencies": {
-    "com.mrotondo.computeplayground": "https://github.com/mrotondo/compute-playground.git?path=/Packages/com.mrotondo.computeplayground#v0.1.0",
+    "com.mrotondo.computeplayground": "https://github.com/mrotondo/compute-playground.git?path=/Packages/com.mrotondo.computeplayground#main",
     "com.unity.ide.visualstudio": "2.0.23",
     "com.unity.modules.imageconversion": "1.0.0",
     "com.unity.modules.imgui": "1.0.0",
@@ -48,15 +48,43 @@ Then:
    `Assets/Rendering/TextureBlitRenderPipelineAsset`.
 5. `git init` and commit.
 
-**The pinned tag has to exist.** Git dependencies get no semver resolution, so `#v0.1.0` is
-matched literally and resolution fails if no such tag is pushed. Use `#main` only while
-iterating — it is a live link, so every project on it changes whenever you push.
-
 If you started from a Unity Hub template instead of a bare folder, install the package through
 Package Manager (+ → Add package from git URL), then run **Apply Settings before Prune
 Packages**. Pruning first strips a pipeline package while `GraphicsSettings` still references
 it, leaving dangling keys in `m_RenderPipelineGlobalSettingsMap` — which is the failure that
 breaks a project on the next editor upgrade.
+
+### Tracking main
+
+Experiments point at `#main` rather than a tag, so there is one version of the package and
+everything moves together. Two consequences worth knowing:
+
+- **A push can break every experiment**, since nothing is pinned. Fix it in the package and
+  push again; there is no old tag to fall back to.
+- **Unity will not re-fetch on its own.** The resolved commit is recorded in
+  `Packages/packages-lock.json` and the code is cached in `Library/PackageCache`. To pick up a
+  new push, delete that package's entry from `packages-lock.json` and reopen the project.
+
+If experiments later need to diverge — one pinned to an old editor version, say — reintroduce
+tags and pin per project. Nothing in the layout prevents it.
+
+## Why these packages and no others
+
+`ManifestPruner.Keep` in the package is the source of truth. `imgui`, `uielements`, `ui` and
+`jsonserialize` are load-bearing for the editor's own windows. `imageconversion` and
+`screencapture` are for saving frames out. `ide.visualstudio` generates the `.csproj` files your
+editor reads — swap it for `com.unity.ide.rider` if you prefer.
+
+Everything else Unity installs by default — terrain, particles, audio, video, XR, visual
+scripting, timeline, uGUI, the five `unitywebrequest` modules — is absent, and absent packages
+cost nothing to compile, import, or build.
+
+One wrinkle: those seven requests resolve to **thirteen** packages.
+`com.unity.ide.visualstudio` depends on `com.unity.test-framework`, which drags in
+`com.unity.ext.nunit` plus the `animation` and `physics` modules; `uielements` pulls
+`hierarchycore`. If you want those gone, drop the IDE package — the cost is that Unity stops
+generating `.csproj` files, so your editor loses code completion. That is usually the wrong
+trade, but it is the only thing still standing between this and a truly bare project.
 
 ## Working on the package
 
@@ -100,12 +128,11 @@ different GUIDs and asset references break.
 ```sh
 git add Packages/com.mrotondo.computeplayground
 git commit -m "..."
-git tag v0.1.0
-git push origin main --tags
+git push origin main
 ```
 
-Consumers pin that tag in their `manifest.json`, as above. An experiment from last year stays
-on its old tag and keeps working.
+That is the whole release. Experiments pick it up the next time they re-resolve the package,
+as described under [Tracking main](#tracking-main).
 
 ## Moving to a new editor version
 
@@ -113,5 +140,5 @@ on its old tag and keeps working.
 2. Fix whatever `MinimalProjectBootstrap` no longer compiles against. This is the point of the
    whole arrangement: the breakage arrives as a compile error on a named line, in one repo,
    once — not as silent misbehaviour in every experiment project you own.
-3. Bump `unity` in `package.json`, tag, and bump the pin in the experiments you want moved.
-   The ones you leave alone keep working against the old tag.
+3. Bump `unity` in `package.json` and push. Every experiment moves to the new package the next
+   time it re-resolves, so bump each one's `ProjectVersion.txt` to match.
