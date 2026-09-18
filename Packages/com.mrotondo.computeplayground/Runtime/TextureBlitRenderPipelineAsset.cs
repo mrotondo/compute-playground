@@ -6,7 +6,7 @@ namespace Mrotondo.ComputePlayground
     [CreateAssetMenu(
         menuName = "Rendering/Texture Blit Render Pipeline Asset",
         fileName = "TextureBlitRenderPipelineAsset")]
-    public class TextureBlitRenderPipelineAsset : RenderPipelineAsset
+    public class TextureBlitRenderPipelineAsset : RenderPipelineAsset<TextureBlitRenderPipeline>
     {
         [Tooltip("Hidden/ComputePlayground/TextureBlit, unless you have replaced it.")]
         [SerializeField] Shader blitShader;
@@ -25,6 +25,13 @@ namespace Mrotondo.ComputePlayground
             get => blitShader;
             set => blitShader = value;
         }
+
+        /// <summary>
+        /// The blit shader carries no "RenderPipeline" SubShader tag, so there is nothing to
+        /// match against. Returning empty silences the base class warning about variant
+        /// stripping; the generic base supplies pipelineType.
+        /// </summary>
+        public override string renderPipelineShaderTag => string.Empty;
 
         protected override RenderPipeline CreatePipeline() =>
             new TextureBlitRenderPipeline(blitShader, clearColor, fitAspect, flipY);
