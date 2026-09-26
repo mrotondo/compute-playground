@@ -1,8 +1,10 @@
 #pragma kernel Init
 #pragma kernel Step
 
-// State lives in alpha; rgb carries the colour that ends up on screen, because the
-// display texture and the simulation texture are the same texture.
+// State lives in alpha as a raw index, not a 0..1 fraction. Normalising it by _StateCount
+// would make every stored value depend on a live inspector parameter, so dragging State Count
+// mid-run would reinterpret the whole field as noise. rgb carries the colour that ends up on
+// screen, because the display texture and the simulation texture are the same texture.
 RWTexture2D<float4> _StateWrite;
 Texture2D<float4> _StateRead;
 
@@ -27,12 +29,12 @@ float3 StateColour(uint state)
 uint ReadState(uint2 coord)
 {
     coord = coord % _Resolution;                       // wrap at the edges
-    return uint(round(_StateRead[coord].a * float(_StateCount)));
+    return uint(round(_StateRead[coord].a));
 }
 
 void Write(uint2 coord, uint state)
 {
-    _StateWrite[coord] = float4(StateColour(state), float(state) / float(_StateCount));
+    _StateWrite[coord] = float4(StateColour(state), float(state));
 }
 
 [numthreads(8, 8, 1)]

@@ -20,7 +20,7 @@ namespace Mrotondo.ComputePlayground
         /// projects have exactly one thing on screen, and this avoids wiring a scene reference
         /// into the pipeline asset.
         /// </summary>
-        public static RenderTexture Source;
+        public static Texture Source;
 
         readonly Material _material;
         readonly Color _clearColor;

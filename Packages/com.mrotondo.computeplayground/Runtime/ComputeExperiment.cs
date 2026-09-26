@@ -25,12 +25,18 @@ namespace Mrotondo.ComputePlayground
         [SerializeField] protected FilterMode filterMode = FilterMode.Point;
         [SerializeField] protected RenderTextureFormat format = RenderTextureFormat.ARGBFloat;
 
+        [Tooltip("Show an orientation test card instead of the simulation. The F should read " +
+                 "the right way round; if it does not, toggle flipY on the pipeline asset.")]
+        [SerializeField] protected bool showTestPattern;
+
         readonly List<RenderTexture> _textures = new List<RenderTexture>();
         readonly List<GraphicsBuffer> _buffers = new List<GraphicsBuffer>();
 
         RenderTexture _display;
+        Texture2D _testPattern;
         ComputeShader _builtWithCompute;
         int _builtAtResolution;
+        bool _builtWithTestPattern;
         bool _rebuildQueued;
 
         /// <summary>
@@ -72,7 +78,9 @@ namespace Mrotondo.ComputePlayground
         void OnValidate()
         {
             // Don't touch GPU resources from inside OnValidate; defer to the next Update.
-            if (_builtAtResolution != resolution || _builtWithCompute != compute)
+            if (_builtAtResolution != resolution ||
+                _builtWithCompute != compute ||
+                _builtWithTestPattern != showTestPattern)
                 _rebuildQueued = true;
         }
 
@@ -84,7 +92,7 @@ namespace Mrotondo.ComputePlayground
                 Rebuild();
             }
 
-            if (compute == null || stepsPerFrame == 0)
+            if (showTestPattern || compute == null || stepsPerFrame == 0)
                 return;
 
             if (frameInterval > 1 && Time.frameCount % frameInterval != 0)
@@ -98,6 +106,14 @@ namespace Mrotondo.ComputePlayground
         public void Rebuild()
         {
             ReleaseAll();
+
+            _builtWithTestPattern = showTestPattern;
+            if (showTestPattern)
+            {
+                _testPattern = TestPattern.Create();
+                TextureBlitRenderPipeline.Source = _testPattern;
+                return;
+            }
 
             // Silent: a freshly added component has no shader yet, and the inspector shows that.
             if (compute == null || !CanRunCompute)
@@ -115,7 +131,7 @@ namespace Mrotondo.ComputePlayground
         [ExperimentButton("Step Once")]
         public void StepOnce()
         {
-            if (compute == null || !CanRunCompute)
+            if (showTestPattern || compute == null || !CanRunCompute)
                 return;
 
             Step(StepCount);
@@ -213,8 +229,15 @@ namespace Mrotondo.ComputePlayground
                 buffer?.Release();
             _buffers.Clear();
 
-            if (TextureBlitRenderPipeline.Source == _display)
+            if (TextureBlitRenderPipeline.Source == _display ||
+                TextureBlitRenderPipeline.Source == _testPattern)
                 TextureBlitRenderPipeline.Source = null;
+
+            if (_testPattern != null)
+            {
+                if (Application.isPlaying) Destroy(_testPattern); else DestroyImmediate(_testPattern);
+                _testPattern = null;
+            }
 
             _display = null;
         }

@@ -15,7 +15,7 @@ public class Cyclic : ComputeExperiment
 
     [Header("Cyclic")]
     [SerializeField, Range(3, 32)] int stateCount = 12;
-    [SerializeField, Range(1, 8)] int threshold = 2;
+    [SerializeField, Range(1, 8)] int threshold = 1;
 
     PingPong<RenderTexture> _state;
     int _initKernel;
