@@ -34,3 +34,6 @@ sysinfo.txt
 *.aab
 *.unitypackage
 *.app
+
+# Stray editor/build logs from headless verification runs.
+*.log

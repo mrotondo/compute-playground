@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.Reflection;
 using UnityEditor;
 using UnityEngine;
@@ -11,32 +13,77 @@ namespace Mrotondo.ComputePlayground.Editor
     [CustomEditor(typeof(ComputeExperiment), editorForChildClasses: true)]
     public class ComputeExperimentEditor : UnityEditor.Editor
     {
-        const BindingFlags Flags =
-            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.FlattenHierarchy;
+        readonly struct Button
+        {
+            public readonly MethodInfo Method;
+            public readonly string Label;
+
+            public Button(MethodInfo method, string label)
+            {
+                Method = method;
+                Label = label;
+            }
+        }
+
+        /// <summary>
+        /// OnInspectorGUI runs on every IMGUI event, which includes every mouse move over the
+        /// inspector, and at least twice per repaint (Layout and Repaint). Reflecting over the
+        /// target's methods in there cost hundreds of allocating calls per event -- enough GC
+        /// churn on the main thread to drop the editor from ~500 to ~100 FPS while the mouse
+        /// moved. Resolve once per type instead.
+        /// </summary>
+        static readonly Dictionary<Type, Button[]> Cache = new Dictionary<Type, Button[]>();
+
+        Button[] _buttons;
+
+        void OnEnable() => _buttons = ButtonsFor(target.GetType());
 
         public override void OnInspectorGUI()
         {
             DrawDefaultInspector();
 
-            var experiment = (ComputeExperiment)target;
-
             EditorGUILayout.Space();
-            EditorGUILayout.LabelField("Steps run", experiment.StepCount.ToString());
+            EditorGUILayout.LabelField("Steps run", ((ComputeExperiment)target).StepCount.ToString());
             EditorGUILayout.Space();
 
-            foreach (MethodInfo method in target.GetType().GetMethods(Flags))
+            foreach (Button button in _buttons ?? ButtonsFor(target.GetType()))
             {
-                var attribute = method.GetCustomAttribute<ExperimentButtonAttribute>();
-                if (attribute == null || method.GetParameters().Length > 0)
+                if (!GUILayout.Button(button.Label))
                     continue;
 
-                string label = attribute.Label ?? ObjectNames.NicifyVariableName(method.Name);
-                if (!GUILayout.Button(label))
-                    continue;
-
-                foreach (Object each in targets)
-                    method.Invoke(each, null);
+                foreach (UnityEngine.Object each in targets)
+                    button.Method.Invoke(each, null);
             }
+        }
+
+        /// <summary>
+        /// TypeCache is built once at domain load, so this walks a short prebuilt list rather
+        /// than reflecting over every inherited member of MonoBehaviour.
+        /// </summary>
+        static Button[] ButtonsFor(Type type)
+        {
+            if (Cache.TryGetValue(type, out Button[] cached))
+                return cached;
+
+            var buttons = new List<Button>();
+
+            foreach (MethodInfo method in TypeCache.GetMethodsWithAttribute<ExperimentButtonAttribute>())
+            {
+                if (method.IsStatic || method.GetParameters().Length > 0)
+                    continue;
+
+                if (method.DeclaringType == null || !method.DeclaringType.IsAssignableFrom(type))
+                    continue;
+
+                var attribute = method.GetCustomAttribute<ExperimentButtonAttribute>();
+                buttons.Add(new Button(
+                    method,
+                    attribute.Label ?? ObjectNames.NicifyVariableName(method.Name)));
+            }
+
+            Button[] resolved = buttons.ToArray();
+            Cache[type] = resolved;
+            return resolved;
         }
     }
 }
