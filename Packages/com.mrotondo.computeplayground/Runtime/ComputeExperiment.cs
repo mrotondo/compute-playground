@@ -47,6 +47,29 @@ namespace Mrotondo.ComputePlayground
             SystemInfo.graphicsDeviceType != UnityEngine.Rendering.GraphicsDeviceType.Null &&
             SystemInfo.supportsComputeShaders;
 
+        static readonly List<ComputeExperiment> Active = new List<ComputeExperiment>();
+
+        /// <summary>
+        /// True when some enabled experiment is mid-run. Edit mode has no continuous game loop
+        /// -- Update only fires when something pumps the player loop, which in practice means
+        /// whatever the editor happens to repaint. An editor-side driver polls this to decide
+        /// whether to keep pumping, so stepping does not depend on where the mouse is.
+        /// </summary>
+        public static bool AnyWantsContinuousUpdate
+        {
+            get
+            {
+                foreach (ComputeExperiment experiment in Active)
+                    if (experiment != null && experiment.WantsContinuousUpdate)
+                        return true;
+
+                return false;
+            }
+        }
+
+        public bool WantsContinuousUpdate =>
+            !showTestPattern && compute != null && stepsPerFrame > 0;
+
         public ComputeShader Compute => compute;
         public int Resolution => resolution;
         public int StepCount { get; private set; }
@@ -71,9 +94,17 @@ namespace Mrotondo.ComputePlayground
         /// <summary>Optional. Anything created via the Create* helpers is released for you.</summary>
         protected virtual void Teardown() { }
 
-        void OnEnable() => Rebuild();
+        void OnEnable()
+        {
+            Active.Add(this);
+            Rebuild();
+        }
 
-        void OnDisable() => ReleaseAll();
+        void OnDisable()
+        {
+            Active.Remove(this);
+            ReleaseAll();
+        }
 
         void OnValidate()
         {
