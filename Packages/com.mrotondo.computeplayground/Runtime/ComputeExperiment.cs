@@ -7,7 +7,6 @@ namespace Mrotondo.ComputePlayground
     /// Base class for a compute-shader experiment. Owns the resources, the stepping loop,
     /// and the hand-off to the render pipeline, so a subclass only writes Initialize() and Step().
     /// </summary>
-    [ExecuteAlways]
     public abstract class ComputeExperiment : MonoBehaviour
     {
         [Header("Simulation")]
@@ -15,11 +14,10 @@ namespace Mrotondo.ComputePlayground
         [SerializeField, Range(16, 8192)] protected int resolution = 512;
 
         [Header("Stepping")]
-        [Tooltip("Simulation steps per rendered frame. 0 pauses.")]
-        [SerializeField, Range(0, 64)] protected int stepsPerFrame = 1;
-
-        [Tooltip("Only step every Nth frame, to run slower than one step per frame.")]
-        [SerializeField, Min(1)] protected int frameInterval = 1;
+        [Tooltip("Simulation steps per rendered frame. Above 1, that many steps run each frame, " +
+                 "rounded down. Below 1, one step runs every 1/speed frames, so 0.25 steps once " +
+                 "every fourth frame. 0 pauses; Step Once then advances by hand.")]
+        [SerializeField, Min(0f)] protected float speed = 1f;
 
         [Header("Display")]
         [SerializeField] protected FilterMode filterMode = FilterMode.Point;
@@ -40,35 +38,11 @@ namespace Mrotondo.ComputePlayground
         bool _rebuildQueued;
 
         /// <summary>
-        /// False during headless builds and on machines without compute support. [ExecuteAlways]
-        /// means OnEnable fires while a player is being built, where there is no graphics device.
+        /// False wherever there is no usable graphics device, such as a headless batch-mode run.
         /// </summary>
         static bool CanRunCompute =>
             SystemInfo.graphicsDeviceType != UnityEngine.Rendering.GraphicsDeviceType.Null &&
             SystemInfo.supportsComputeShaders;
-
-        static readonly List<ComputeExperiment> Active = new List<ComputeExperiment>();
-
-        /// <summary>
-        /// True when some enabled experiment is mid-run. Edit mode has no continuous game loop
-        /// -- Update only fires when something pumps the player loop, which in practice means
-        /// whatever the editor happens to repaint. An editor-side driver polls this to decide
-        /// whether to keep pumping, so stepping does not depend on where the mouse is.
-        /// </summary>
-        public static bool AnyWantsContinuousUpdate
-        {
-            get
-            {
-                foreach (ComputeExperiment experiment in Active)
-                    if (experiment != null && experiment.WantsContinuousUpdate)
-                        return true;
-
-                return false;
-            }
-        }
-
-        public bool WantsContinuousUpdate =>
-            !showTestPattern && compute != null && stepsPerFrame > 0;
 
         public ComputeShader Compute => compute;
         public int Resolution => resolution;
@@ -94,17 +68,9 @@ namespace Mrotondo.ComputePlayground
         /// <summary>Optional. Anything created via the Create* helpers is released for you.</summary>
         protected virtual void Teardown() { }
 
-        void OnEnable()
-        {
-            Active.Add(this);
-            Rebuild();
-        }
+        void OnEnable() => Rebuild();
 
-        void OnDisable()
-        {
-            Active.Remove(this);
-            ReleaseAll();
-        }
+        void OnDisable() => ReleaseAll();
 
         void OnValidate()
         {
@@ -123,13 +89,22 @@ namespace Mrotondo.ComputePlayground
                 Rebuild();
             }
 
-            if (showTestPattern || compute == null || stepsPerFrame == 0)
+            if (showTestPattern || compute == null || speed <= 0f)
                 return;
 
-            if (frameInterval > 1 && Time.frameCount % frameInterval != 0)
-                return;
+            if (speed >= 1f)
+            {
+                // Faster than realtime. The rate only changes at whole numbers: 2.7 runs two.
+                int steps = Mathf.FloorToInt(speed);
+                for (int i = 0; i < steps; i++)
+                    StepOnce();
 
-            for (int i = 0; i < stepsPerFrame; i++)
+                return;
+            }
+
+            // Slower than realtime: spread a single step across several frames instead.
+            int framesPerStep = Mathf.Max(1, Mathf.FloorToInt(1f / speed));
+            if (Time.frameCount % framesPerStep == 0)
                 StepOnce();
         }
 
