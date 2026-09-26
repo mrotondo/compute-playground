@@ -9,8 +9,19 @@ in `Library/PackageCache` and cannot be edited in place. Experiments track `main
 
 ## Starting a new experiment project
 
-You need two files. Nothing else is checked in — Unity regenerates all of `ProjectSettings/`
-with defaults on first open, and `Apply Settings` takes it from there.
+You need two files **and an empty `Assets/` folder**:
+
+```
+my-experiment/
+  Assets/                             <- must exist, even empty
+  Packages/manifest.json
+  ProjectSettings/ProjectVersion.txt
+```
+
+Unity Hub reports a folder with no `Assets/` as an invalid project, even when everything else
+is correct. (Batch mode is more forgiving and will open it regardless, so this is easy to miss
+when scripting.) Nothing else is checked in — Unity regenerates all of `ProjectSettings/` with
+defaults on first open, and `Apply Settings` takes it from there.
 
 **`Packages/manifest.json`**
 
