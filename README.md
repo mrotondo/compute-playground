@@ -5,7 +5,8 @@ scaffolding a compute-shader experiment needs. The package lives at
 `Packages/com.mrotondo.computeplayground/`; this project is where it is developed.
 
 Embedded rather than consumed from git, because a package installed by git URL lands read-only
-in `Library/PackageCache` and cannot be edited in place. Experiments track `main`.
+in `Library/PackageCache` and cannot be edited in place. Experiments consume a released
+version of it.
 
 ## Starting a new experiment project
 
@@ -65,19 +66,26 @@ Packages**. Pruning first strips a pipeline package while `GraphicsSettings` sti
 it, leaving dangling keys in `m_RenderPipelineGlobalSettingsMap` — which is the failure that
 breaks a project on the next editor upgrade.
 
-### Tracking main
+### Versioning
 
-Experiments point at `#main` rather than a tag, so there is one version of the package and
-everything moves together. Two consequences worth knowing:
+Every commit meant to be picked up bumps the patch version in `package.json` and carries a
+matching `vX.Y.Z` tag. Package Manager shows that number, so a project can tell you what it is
+actually running.
 
-- **A push can break every experiment**, since nothing is pinned. Fix it in the package and
-  push again; there is no old tag to fall back to.
-- **Unity will not re-fetch on its own.** The resolved commit is recorded in
-  `Packages/packages-lock.json` and the code is cached in `Library/PackageCache`. To pick up a
-  new push, delete that package's entry from `packages-lock.json` and reopen the project.
+The recipe above pins `#main`, which is what makes Package Manager's **Update** button useful:
+it re-resolves the ref, and for a branch that means the newest commit. Pinning a tag instead —
+`#v0.1.1` — freezes a project at that release; Update then re-resolves the same tag and changes
+nothing, and moving up means editing `manifest.json` by hand. Pin a tag when a project needs to
+stop moving, track `main` while it is still being built.
 
-If experiments later need to diverge — one pinned to an old editor version, say — reintroduce
-tags and pin per project. Nothing in the layout prevents it.
+Either way, **Unity never re-fetches on its own.** The resolved commit is recorded in
+`Packages/packages-lock.json` and cached in `Library/PackageCache`, and it is authoritative: a
+project sitting on an old commit stays there through any number of pushes until you press
+Update, or delete that package's entry from the lock.
+
+Note that git dependencies get no semver resolution. Unity matches the ref literally, so
+`#v0.1.1` means that tag and nothing else — there are no ranges and nothing for a resolver to
+choose between. The version number is documentation and a name to pin to, not a constraint.
 
 ## Why these packages and no others
 
@@ -136,14 +144,21 @@ Unity generates `.meta` files for the package on first import. **Commit them.** 
 GUIDs that consuming projects reference; if they are not in the repo, every consumer generates
 different GUIDs and asset references break.
 
+Bump the patch version in `package.json`, commit, tag, and push both:
+
 ```sh
 git add Packages/com.mrotondo.computeplayground
 git commit -m "..."
-git push origin main
+git tag v0.1.1
+git push origin main --tags
 ```
 
-That is the whole release. Experiments pick it up the next time they re-resolve the package,
-as described under [Tracking main](#tracking-main).
+Bump the **minor** version rather than the patch when something changes shape — a renamed or
+removed serialized field, a changed component layout — because Unity silently drops serialized
+values that no longer match, and an experiment will come back with defaults where it had your
+settings. Replacing `stepsPerFrame`/`frameInterval` with `speed` was one of those.
+
+Experiments pick a release up as described under [Versioning](#versioning).
 
 ## Moving to a new editor version
 
@@ -151,5 +166,6 @@ as described under [Tracking main](#tracking-main).
 2. Fix whatever `MinimalProjectBootstrap` no longer compiles against. This is the point of the
    whole arrangement: the breakage arrives as a compile error on a named line, in one repo,
    once — not as silent misbehaviour in every experiment project you own.
-3. Bump `unity` in `package.json` and push. Every experiment moves to the new package the next
-   time it re-resolves, so bump each one's `ProjectVersion.txt` to match.
+3. Bump `unity` and the **minor** version in `package.json`, tag, and push. Then bump each
+   experiment's `ProjectVersion.txt` to match as you move it up; experiments you leave alone
+   stay on the commit their lock file names.
