@@ -14,10 +14,11 @@ namespace Mrotondo.ComputePlayground
         [SerializeField, Range(16, 8192)] protected int resolution = 512;
 
         [Header("Stepping")]
-        [Tooltip("Simulation steps per rendered frame. Above 1, that many steps run each frame, " +
-                 "rounded down. Below 1, one step runs every 1/speed frames, so 0.25 steps once " +
-                 "every fourth frame. 0 pauses; Step Once then advances by hand.")]
-        [SerializeField, Min(0f)] protected float speed = 1f;
+        [Tooltip("Simulation steps per second, independent of framerate: 60 runs sixty steps a " +
+                 "second whether you render at 60 or 500, and 0.2 runs one every five seconds. " +
+                 "Ask for more than the GPU can manage and it simply falls behind. 0 pauses; " +
+                 "Step Once then advances by hand.")]
+        [SerializeField, Min(0f)] protected float stepsPerSecond = 60f;
 
         [Header("Display")]
         [SerializeField] protected FilterMode filterMode = FilterMode.Point;
@@ -30,8 +31,17 @@ namespace Mrotondo.ComputePlayground
         readonly List<RenderTexture> _textures = new List<RenderTexture>();
         readonly List<GraphicsBuffer> _buffers = new List<GraphicsBuffer>();
 
+        /// <summary>
+        /// Ceiling on the time a single frame may contribute. Without it a slow frame requests a
+        /// proportionally larger batch on the next one, and that feedback loop is geometric: ask
+        /// for ten times what the GPU can manage and the editor hangs within a few frames. Unity
+        /// bounds FixedUpdate the same way, via Time.maximumDeltaTime.
+        /// </summary>
+        const float MaxDelta = 0.1f;
+
         RenderTexture _display;
         Texture2D _testPattern;
+        float _stepAccumulator;
         ComputeShader _builtWithCompute;
         int _builtAtResolution;
         bool _builtWithTestPattern;
@@ -89,22 +99,20 @@ namespace Mrotondo.ComputePlayground
                 Rebuild();
             }
 
-            if (showTestPattern || compute == null || speed <= 0f)
+            if (showTestPattern || compute == null || stepsPerSecond <= 0f)
                 return;
 
-            if (speed >= 1f)
-            {
-                // Faster than realtime. The rate only changes at whole numbers: 2.7 runs two.
-                int steps = Mathf.FloorToInt(speed);
-                for (int i = 0; i < steps; i++)
-                    StepOnce();
+            _stepAccumulator += Mathf.Min(Time.unscaledDeltaTime, MaxDelta);
 
+            int steps = Mathf.FloorToInt(_stepAccumulator * stepsPerSecond);
+            if (steps <= 0)
                 return;
-            }
 
-            // Slower than realtime: spread a single step across several frames instead.
-            int framesPerStep = Mathf.Max(1, Mathf.FloorToInt(1f / speed));
-            if (Time.frameCount % framesPerStep == 0)
+            // Subtracting exactly what ran leaves less than one step's worth behind, so the
+            // accumulator cannot bank time and dump a burst later.
+            _stepAccumulator -= steps / stepsPerSecond;
+
+            for (int i = 0; i < steps; i++)
                 StepOnce();
         }
 
@@ -127,6 +135,7 @@ namespace Mrotondo.ComputePlayground
 
             _builtWithCompute = compute;
             _builtAtResolution = resolution;
+            _stepAccumulator = 0f;
             StepCount = 0;
             Initialize();
 

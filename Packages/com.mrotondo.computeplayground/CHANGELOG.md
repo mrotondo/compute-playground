@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.2.0] - 2026-09-26
+
+**Breaking:** `speed` is replaced by `stepsPerSecond`. Unity silently drops serialized values
+whose fields no longer exist, so existing experiments come back at the default of 60.
+
+- Stepping is time-based rather than per-frame. `stepsPerSecond` holds whether you render at 60
+  FPS or 500, so capping the framerate no longer slows the simulation down with it. 0 pauses,
+  and `Step Once` still advances a paused simulation by hand.
+- Every rate below 1 is now distinct. Under the old `floor(1 / speed)` scheme, 0.51 through 0.99
+  all collapsed onto the same behaviour as 1.
+- Asking for a higher rate than the GPU can sustain makes the simulation fall behind wall clock
+  instead of spiralling. A single frame contributes at most 0.1s to the accumulator, which
+  bounds the batch size; without that bound the loop is geometric — a slow frame requests a
+  larger batch, which makes the next frame slower still — and hangs the editor within a few
+  frames. There is no cap on steps per frame, so throughput is whatever the hardware gives.
+
 ## [0.1.2] - 2026-09-26
 
 - `TextureBlitRenderPipeline` keeps one `CommandBuffer` for its lifetime and clears it each
