@@ -149,9 +149,20 @@ Bump the patch version in `package.json`, commit, tag, and push both:
 ```sh
 git add Packages/com.mrotondo.computeplayground
 git commit -m "..."
-git tag v0.1.1
-git push origin main --tags
+git tag -a v0.1.2 -m "v0.1.2"
+git push --follow-tags
 ```
+
+Use `--follow-tags`, not `--tags`. `--tags` adds tags to the refspecs *explicitly listed on the
+command line*, and does not add them to the default refspec — so a bare `git push --tags`
+pushes the tags and silently skips the branch, leaving the remote with a tag pointing at a
+commit nobody can see. `--follow-tags` keeps the normal branch push and brings along annotated
+tags reachable from it, which is why the tag above is annotated (`-a`); `--follow-tags` ignores
+lightweight ones.
+
+Only changes inside `Packages/com.mrotondo.computeplayground/` need a version bump and tag.
+Edits to this README or to the development project are not part of the package and can just be
+pushed.
 
 Bump the **minor** version rather than the patch when something changes shape — a renamed or
 removed serialized field, a changed component layout — because Unity silently drops serialized
