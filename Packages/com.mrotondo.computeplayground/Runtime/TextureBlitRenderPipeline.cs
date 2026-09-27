@@ -22,6 +22,11 @@ namespace Mrotondo.ComputePlayground
         /// </summary>
         public static Texture Source;
 
+        // One buffer for the pipeline's lifetime, cleared per frame, rather than a fresh
+        // allocation every Render. CommandBufferPool does the same thing but lives in the SRP
+        // Core package, and this pipeline deliberately has no package dependencies.
+        readonly CommandBuffer _commandBuffer = new CommandBuffer { name = "Texture Blit" };
+
         readonly Material _material;
         readonly Color _clearColor;
         readonly bool _fitAspect;
@@ -46,33 +51,31 @@ namespace Mrotondo.ComputePlayground
             if (_material == null)
                 return;
 
-            var cmd = new CommandBuffer { name = "Texture Blit" };
-
             foreach (Camera camera in cameras)
             {
                 context.SetupCameraProperties(camera);
 
-                cmd.Clear();
-                cmd.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
-                cmd.ClearRenderTarget(true, true, _clearColor);
+                _commandBuffer.Clear();
+                _commandBuffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
+                _commandBuffer.ClearRenderTarget(true, true, _clearColor);
 
                 if (Source != null)
                 {
-                    cmd.SetGlobalTexture(SourceTexId, Source);
-                    cmd.SetGlobalVector(BlitScaleId, FitScale(camera));
-                    cmd.SetGlobalFloat(FlipYId, _flipY ? 1f : 0f);
+                    _commandBuffer.SetGlobalTexture(SourceTexId, Source);
+                    _commandBuffer.SetGlobalVector(BlitScaleId, FitScale(camera));
+                    _commandBuffer.SetGlobalFloat(FlipYId, _flipY ? 1f : 0f);
 
                     // A single oversized triangle, scaled down to the letterboxed rect.
                     // DrawProcedural rather than CommandBuffer.Blit: Blit is legacy API that
                     // mutates render state behind your back and is not SRP-safe.
-                    cmd.DrawProcedural(Matrix4x4.identity, _material, 0, MeshTopology.Triangles, 3);
+                    _commandBuffer.DrawProcedural(
+                        Matrix4x4.identity, _material, 0, MeshTopology.Triangles, 3);
                 }
 
-                context.ExecuteCommandBuffer(cmd);
+                context.ExecuteCommandBuffer(_commandBuffer);
             }
 
             context.Submit();
-            cmd.Release();
         }
 
         /// <summary>
@@ -94,6 +97,9 @@ namespace Mrotondo.ComputePlayground
         protected override void Dispose(bool disposing)
         {
             base.Dispose(disposing);
+
+            _commandBuffer.Release();
+
             if (_material == null)
                 return;
 
